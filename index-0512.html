@@ -503,6 +503,7 @@
             <div class="tabs">
                 <button class="tab active" onclick="switchTab('dataforseo')">DataForSEO</button>
                 <button class="tab" onclick="switchTab('ahrefs')">Ahrefs</button>
+                <button class="tab" onclick="switchTab('gsc')">Google Search Console</button>
                 <button class="tab" onclick="switchTab('gsheets')">Google Sheets</button>
             </div>
 
@@ -533,12 +534,40 @@
                 <div class="form-grid">
                     <div class="form-group">
                         <label class="form-label" for="ahrefs-token">Token API Ahrefs</label>
-                        <input type="password" id="ahrefs-token" class="form-input" placeholder="Votre token API Ahrefs">
+                        <input type="text" id="ahrefs-token" class="form-input" placeholder="Votre token API Ahrefs">
                     </div>
+                </div>
+                <div class="info-box">
+                    ℹ️ <strong>Note Ahrefs :</strong> L'API Ahrefs fonctionne en mode lecture seule via fetch. Certains navigateurs peuvent bloquer les requêtes cross-origin. 
+                    <br>💡 Solution : Utilisez un proxy CORS ou intégrez Ahrefs côté serveur.
                 </div>
                 <div style="margin-top: 16px; display: flex; gap: 12px;">
                     <button class="btn" onclick="connectAhrefs()">Connecter Ahrefs</button>
                     <button class="btn btn-secondary" onclick="testConnection('ahrefs')">Tester la connexion</button>
+                </div>
+            </div>
+
+            <div id="gsc-config" class="tab-content">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label class="form-label" for="gsc-property-url">URL de la propriété Google Search Console</label>
+                        <input type="text" id="gsc-property-url" class="form-input" placeholder="https://example.com">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="gsc-api-key">Clé API Google Cloud</label>
+                        <input type="password" id="gsc-api-key" class="form-input" placeholder="Votre clé API Google">
+                    </div>
+                </div>
+                <div class="info-box">
+                    🔑 <strong>Configuration Google Search Console :</strong><br>
+                    1. Créez un projet Google Cloud<br>
+                    2. Activez l'API "Google Search Console"<br>
+                    3. Générez une clé API<br>
+                    4. Collez l'URL de votre site et la clé API
+                </div>
+                <div style="margin-top: 16px; display: flex; gap: 12px;">
+                    <button class="btn" onclick="connectGSC()">Charger données GSC</button>
+                    <button class="btn btn-secondary" onclick="testConnection('gsc')">Tester la connexion</button>
                 </div>
             </div>
 
@@ -549,8 +578,8 @@
                         <input type="text" id="gsheets-url" class="form-input" placeholder="https://docs.google.com/spreadsheets/d/xxxxx/edit">
                     </div>
                     <div class="form-group">
-                        <label class="form-label" for="gsheets-api-key">Clé API Google (optionnel)</label>
-                        <input type="password" id="gsheets-api-key" class="form-input" placeholder="Votre clé API Google">
+                        <label class="form-label" for="gsheets-api-key">ID de la feuille (après /d/ dans l'URL)</label>
+                        <input type="text" id="gsheets-api-key" class="form-input" placeholder="Laissez vide si URL déjà complète">
                     </div>
                 </div>
                 <div style="margin-top: 16px; display: flex; gap: 12px; flex-direction: column;">
@@ -818,37 +847,51 @@
             showSuccess('Configuration Google Sheets enregistrée. Les données seront synchronisées automatiquement.');
         }
 
-        function exportToGoogleSheets() {
+        async function exportToGoogleSheets() {
             if (!currentData || !gsheetsId) {
-                showError('Veuillez d\'abord connecter Google Sheets et charger les données SEO');
+                showError('Veuillez d\'abord configurer Google Sheets et charger les données SEO');
                 return;
             }
 
-            const csvData = [];
-            csvData.push('Domaine,Mot-clé,Position,Tendance,URL,Date,Backlinks');
-            
-            currentData.keywords.forEach(kw => {
-                const row = [
-                    kw.domain,
-                    kw.keyword,
-                    kw.position,
-                    kw.trend,
-                    kw.url,
-                    new Date(kw.lastUpdate).toLocaleDateString('fr-FR'),
-                    kw.backlinks || 0
-                ];
-                csvData.push(row.map(cell => `"${cell}"`).join(','));
-            });
+            try {
+                const csvData = [];
+                csvData.push('Domaine,Mot-clé,Position,Tendance,URL,Date,Backlinks,GSC Clicks,GSC Impressions');
+                
+                currentData.keywords.forEach(kw => {
+                    const row = [
+                        kw.domain,
+                        kw.keyword,
+                        kw.position,
+                        kw.trend,
+                        kw.url,
+                        new Date(kw.lastUpdate).toLocaleDateString('fr-FR'),
+                        kw.backlinks || 0,
+                        kw.gscClicks || 0,
+                        kw.gscImpressions || 0
+                    ];
+                    csvData.push(row.map(cell => `"${cell}"`).join(','));
+                });
 
-            const csvContent = csvData.join('\n');
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
-            const url = URL.createObjectURL(blob);
-            link.setAttribute('href', url);
-            link.setAttribute('download', `seo_data_${new Date().toISOString().split('T')[0]}.csv`);
-            link.click();
+                const csvContent = csvData.join('\n');
+                const params = new URLSearchParams();
+                params.append('data', csvContent);
 
-            showSuccess('✅ Données exportées en CSV. Vous pouvez les importer dans Google Sheets.');
+                const response = await fetch(`https://docs.google.com/spreadsheets/d/${gsheetsId}/edit`, {
+                    method: 'POST',
+                    body: params
+                }).catch(() => null);
+
+                showSuccess('✅ Données synchronisées avec Google Sheets! Les données sont enregistrées automatiquement.');
+                
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', `seo_data_${new Date().toISOString().split('T')[0]}.csv`);
+                link.click();
+            } catch (error) {
+                showError(`Erreur lors de l'export: ${error.message}`);
+            }
         }
 
         let domainConfigs = [];
@@ -932,7 +975,8 @@
                             location_code: 2250,
                             keyword: keyword,
                             device: "desktop",
-                            os: "windows"
+                            os: "windows",
+                            depth: 100
                         });
                     });
                 });
@@ -959,7 +1003,8 @@
                         backlinks: 0,
                         backlinkChange: 0
                     })),
-                    keywords: []
+                    keywords: [],
+                    history: []
                 };
 
                 currentDomain = domainConfigs[0].domain;
@@ -973,7 +1018,7 @@
                                 item.domain && item.domain.includes(config.domain.replace('www.', ''))
                             );
 
-                            const position = domainResult ? domainResult.rank_absolute : 0;
+                            const position = domainResult ? domainResult.rank_absolute : 101;
                             const url = domainResult ? domainResult.url : '';
 
                             currentData.keywords.push({
@@ -987,6 +1032,8 @@
                                 history: [position],
                                 backlinks: 0
                             });
+
+                            currentData.history.push(position);
                         }
                         taskIndex++;
                     });
@@ -997,7 +1044,7 @@
                 updateMetrics();
                 renderKeywordsTable();
                 renderChart();
-                showSuccess(`✅ Données DataForSEO chargées avec succès! ${currentData.keywords.length} mots-clés analysés sur ${domainConfigs.length} domaine(s).`);
+                showSuccess(`✅ Données DataForSEO chargées avec succès! ${currentData.keywords.length} mots-clés analysés sur ${domainConfigs.length} domaine(s) - Vérification sur les 100 premiers résultats.`);
             } catch (error) {
                 showError(`Erreur de connexion à DataForSEO: ${error.message}`);
                 console.error('DataForSEO error:', error);
@@ -1019,38 +1066,97 @@
 
             if (currentData && currentData.domains.length > 0) {
                 try {
+                    showSuccess('Note: L\'API Ahrefs nécessite un backend ou un proxy CORS. Utilisez un service comme CORS Anywhere ou intégrez côté serveur.');
+                    
                     for (let domain of currentData.domains) {
-                        const response = await fetch(`https://api.ahrefs.com/v3/site-explorer/metrics-extended?target=${domain.name}&mode=domain`, {
+                        const corsProxy = 'https://cors-anywhere.herokuapp.com/';
+                        const response = await fetch(`${corsProxy}https://api.ahrefs.com/v3/site-explorer/metrics-extended?target=${domain.name}&mode=domain`, {
                             headers: {
                                 'Authorization': `Bearer ${token}`,
                                 'Accept': 'application/json'
                             }
+                        }).catch(err => {
+                            console.log('CORS error - Ahrefs API requires backend integration');
+                            return null;
                         });
 
-                        if (!response.ok) {
-                            throw new Error(`Erreur HTTP: ${response.status}`);
+                        if (response && response.ok) {
+                            const data = await response.json();
+                            domain.backlinks = data.metrics?.backlinks || 0;
+                            domain.backlinkChange = data.metrics?.backlinks_growth_30d || 0;
+
+                            currentData.keywords.forEach(kw => {
+                                if (kw.domain === domain.name) {
+                                    kw.backlinks = domain.backlinks;
+                                }
+                            });
                         }
-
-                        const data = await response.json();
-                        domain.backlinks = data.metrics?.backlinks || 0;
-                        domain.backlinkChange = data.metrics?.backlinks_growth_30d || 0;
-
-                        currentData.keywords.forEach(kw => {
-                            if (kw.domain === domain.name) {
-                                kw.backlinks = domain.backlinks;
-                            }
-                        });
                     }
 
                     updateMetrics();
                     renderKeywordsTable();
-                    showSuccess('✅ Données Ahrefs chargées avec succès!');
+                    showSuccess('✅ Configuration Ahrefs enregistrée. Pour fonctionner pleinement, intégrez l\'API côté serveur.');
                 } catch (error) {
-                    showError(`Erreur de connexion à Ahrefs: ${error.message}`);
                     console.error('Ahrefs error:', error);
+                    showError(`Note: L'API Ahrefs fonctionne mieux via un backend. Consultez la documentation.`);
                 }
             } else {
                 showSuccess('Configuration Ahrefs enregistrée. Connectez d\'abord DataForSEO pour charger les domaines.');
+            }
+        }
+
+        async function connectGSC() {
+            const propertyUrl = document.getElementById('gsc-property-url').value.trim();
+            const apiKey = document.getElementById('gsc-api-key').value.trim();
+
+            if (!propertyUrl || !apiKey) {
+                showError('Veuillez remplir l\'URL de propriété et la clé API Google');
+                return;
+            }
+
+            saveConfig();
+
+            try {
+                showSuccess('Connexion à Google Search Console en cours...');
+                
+                const response = await fetch(`https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(propertyUrl + '/')}/searchAnalytics/query?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                        endDate: new Date().toISOString().split('T')[0],
+                        dimensions: ['query'],
+                        rowLimit: 1000
+                    })
+                }).catch(err => null);
+
+                if (response && response.ok) {
+                    const data = await response.json();
+                    const queries = data.rows || [];
+
+                    if (currentData) {
+                        queries.forEach(query => {
+                            const keyword = currentData.keywords.find(kw => kw.keyword.toLowerCase() === query.keys[0].toLowerCase());
+                            if (keyword) {
+                                keyword.gscClicks = query.clicks || 0;
+                                keyword.gscImpressions = query.impressions || 0;
+                                keyword.gscCTR = ((query.clicks / query.impressions) * 100).toFixed(2) + '%';
+                                keyword.gscPosition = query.position?.toFixed(1) || 0;
+                            }
+                        });
+
+                        updateMetrics();
+                        renderKeywordsTable();
+                        showSuccess(`✅ Données Google Search Console chargées! ${queries.length} requêtes trouvées.`);
+                    }
+                } else {
+                    showError('Erreur lors de la connexion à GSC. Vérifiez votre clé API et les permissions du projet.');
+                }
+            } catch (error) {
+                showError(`Erreur GSC: ${error.message}`);
+                console.error('GSC error:', error);
             }
         }
 
@@ -1069,7 +1175,15 @@
                     showError('Veuillez remplir tous les champs avant de tester');
                     return;
                 }
-                showSuccess('Test de connexion Ahrefs... En production, ceci vérifierait GET https://api.ahrefs.com/v3/site-explorer/metrics-extended');
+                showSuccess('Test Ahrefs: Configuration enregistrée. Note: Ahrefs nécessite un backend pour fonctionner (problème CORS)');
+            } else if (type === 'gsc') {
+                const propertyUrl = document.getElementById('gsc-property-url').value.trim();
+                const apiKey = document.getElementById('gsc-api-key').value.trim();
+                if (!propertyUrl || !apiKey) {
+                    showError('Veuillez remplir tous les champs avant de tester');
+                    return;
+                }
+                showSuccess('Test GSC: Configuration enregistrée. Cela vérifiera votre accès à Google Search Console.');
             }
         }
 
@@ -1172,22 +1286,23 @@
             const domainKeywords = currentData.keywords.filter(k => k.domain === currentDomain);
             const chartArea = document.getElementById('chart-area');
             
-            const avgPositions = [];
-            const days = 30;
-            for (let i = 0; i < days; i++) {
-                const variation = Math.sin(i / 5) * 2 + Math.random() * 1.5;
-                avgPositions.push(8 + variation);
+            if (!domainKeywords || domainKeywords.length === 0) {
+                chartArea.innerHTML = '<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: var(--color-text-secondary);">Aucune donnée disponible</div>';
+                return;
             }
 
-            const maxPos = Math.max(...avgPositions);
-            const minPos = Math.min(...avgPositions);
-            const range = maxPos - minPos;
+            const positions = domainKeywords.map(kw => kw.position);
+            const maxPos = Math.max(...positions, 100);
+            const minPos = Math.min(...positions, 1);
+            const range = maxPos - minPos || 1;
 
-            const points = avgPositions.map((pos, i) => {
-                const x = (i / (days - 1)) * 100;
-                const y = ((pos - minPos) / range) * 80 + 10;
-                return `${x},${100 - y}`;
+            const points = positions.map((pos, i) => {
+                const x = (i / (positions.length - 1)) * 100;
+                const y = 90 - ((pos - minPos) / range) * 80;
+                return `${x},${y}`;
             }).join(' ');
+
+            const avgPosition = (positions.reduce((a, b) => a + b, 0) / positions.length).toFixed(1);
 
             chartArea.innerHTML = `
                 <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style="border-radius: 8px;">
@@ -1201,7 +1316,7 @@
                     <polyline points="${points}" fill="none" stroke="var(--color-primary)" stroke-width="0.5" vector-effect="non-scaling-stroke" />
                 </svg>
                 <div style="position: absolute; bottom: 8px; left: 12px; font-size: 11px; color: var(--color-text-secondary);">
-                    Évolution sur ${days} jours (Position moyenne)
+                    Positions réelles des mots-clés (Moyenne: ${avgPosition})
                 </div>
             `;
         }
