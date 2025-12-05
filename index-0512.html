@@ -517,6 +517,22 @@
                         <label class="form-label" for="dataforseo-password">Mot de passe API</label>
                         <input type="password" id="dataforseo-password" class="form-input" placeholder="Votre mot de passe API">
                     </div>
+                    <div class="form-group">
+                        <label class="form-label" for="dataforseo-country">Pays de recherche</label>
+                        <select id="dataforseo-country" class="form-input">
+                            <option value="2250">France (2250)</option>
+                            <option value="2724">Espagne (2724)</option>
+                            <option value="2826">Royaume-Uni (2826)</option>
+                            <option value="2840">États-Unis (2840)</option>
+                            <option value="2056">Suisse (2056)</option>
+                            <option value="2124">Canada (2124)</option>
+                            <option value="2392">Allemagne (2392)</option>
+                            <option value="2380">Italie (2380)</option>
+                            <option value="2528">Pays-Bas (2528)</option>
+                            <option value="2620">Portugal (2620)</option>
+                            <option value="2826">Belgique (2826)</option>
+                        </select>
+                    </div>
                     <div class="form-group" style="grid-column: 1 / -1;">
                         <label class="form-label">Configuration par domaine</label>
                         <div id="domains-config-container" style="display: flex; flex-direction: column; gap: 12px;">
@@ -578,20 +594,52 @@
                         <input type="text" id="gsheets-url" class="form-input" placeholder="https://docs.google.com/spreadsheets/d/xxxxx/edit">
                     </div>
                     <div class="form-group">
+                        <label class="form-label" for="gsheets-webhook-url">URL de déploiement Google Apps Script</label>
+                        <input type="text" id="gsheets-webhook-url" class="form-input" placeholder="https://script.google.com/macros/s/xxxxx/usercontent">
+                    </div>
+                    <div class="form-group">
                         <label class="form-label" for="gsheets-api-key">ID de la feuille (après /d/ dans l'URL)</label>
                         <input type="text" id="gsheets-api-key" class="form-input" placeholder="Laissez vide si URL déjà complète">
                     </div>
                 </div>
                 <div style="margin-top: 16px; display: flex; gap: 12px; flex-direction: column;">
-                    <button class="btn" onclick="setupGoogleSheets()">Configurer l'historique Google Sheets</button>
+                    <button class="btn" onclick="setupGoogleSheets()">Configurer Google Sheets + Synchronisation</button>
                     <button class="btn btn-secondary" onclick="exportToGoogleSheets()">Exporter les données actuelles</button>
                 </div>
                 <div class="info-box">
-                    💡 <strong>Configuration Google Sheets :</strong><br>
-                    1. Créez une feuille Google Sheets publique ou partagée<br>
-                    2. Collez l'URL de la feuille ci-dessus<br>
-                    3. Les données seront automatiquement synchronisées<br>
-                    4. Format attendu : Domaine | Mot-clé | Position | Date | Backlinks
+                    💡 <strong>Configuration Google Sheets - Synchronisation Automatique :</strong><br><br>
+                    <strong style="color: var(--color-primary);">Étape 1: Créer le Google Apps Script</strong><br>
+                    1. Ouvrez votre Google Sheets<br>
+                    2. Menu → Extensions → Apps Script<br>
+                    3. Collez ce code (remplacez tout):<br>
+                    <code style="display: block; background: rgba(0,0,0,0.1); padding: 8px; margin: 8px 0; border-radius: 4px; font-size: 11px; overflow-x: auto;">
+function doPost(e) {<br>
+&nbsp;&nbsp;const sheet = SpreadsheetApp.getActiveSheet();<br>
+&nbsp;&nbsp;const csvData = e.parameter.data;<br>
+&nbsp;&nbsp;const rows = csvData.split('\n').map(row => <br>
+&nbsp;&nbsp;&nbsp;&nbsp;row.split(',').map(cell => cell.replace(/"/g, ''))<br>
+&nbsp;&nbsp;);<br>
+&nbsp;&nbsp;sheet.clearContents();<br>
+&nbsp;&nbsp;rows.forEach((row, index) => {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;sheet.getRange(index + 1, 1, 1, row.length).setValues([row]);<br>
+&nbsp;&nbsp;});<br>
+&nbsp;&nbsp;return ContentService.createTextOutput('✅ Synchronisé');<br>
+}
+                    </code>
+                    4. Sauvegardez (Ctrl+S)<br>
+                    5. Cliquez "Exécuter" → Autorisez<br><br>
+                    <strong style="color: var(--color-primary);">Étape 2: Déployer le script</strong><br>
+                    1. Menu → Déploiements → Nouveau déploiement<br>
+                    2. Type → Web app<br>
+                    3. Exécuter en tant que → Vous<br>
+                    4. Qui a accès → N'importe qui<br>
+                    5. Cliquez "Déployer"<br>
+                    6. Copiez l'URL de déploiement (commence par https://script.google.com/macros/s/)<br><br>
+                    <strong style="color: var(--color-primary);">Étape 3: Configurer le dashboard</strong><br>
+                    1. Collez l'URL de déploiement ci-dessus ← 👈 ICI<br>
+                    2. Collez l'URL de votre Google Sheets<br>
+                    3. Cliquez "Configurer Google Sheets + Synchronisation"<br>
+                    4. Ensuite utilisez "Exporter les données actuelles" pour synchroniser
                 </div>
             </div>
         </div>
@@ -832,8 +880,15 @@
 
         function setupGoogleSheets() {
             const url = document.getElementById('gsheets-url').value.trim();
+            const webhookUrl = document.getElementById('gsheets-webhook-url').value.trim();
+            
             if (!url) {
                 showError('Veuillez entrer l\'URL de la feuille Google Sheets');
+                return;
+            }
+
+            if (!webhookUrl) {
+                showError('Veuillez entrer l\'URL de déploiement Google Apps Script');
                 return;
             }
 
@@ -844,7 +899,7 @@
             }
 
             saveConfig();
-            showSuccess('Configuration Google Sheets enregistrée. Les données seront synchronisées automatiquement.');
+            showSuccess('✅ Configuration complète! Utilisez "Exporter les données actuelles" pour synchroniser automatiquement vos données vers Google Sheets.');
         }
 
         async function exportToGoogleSheets() {
@@ -852,6 +907,8 @@
                 showError('Veuillez d\'abord configurer Google Sheets et charger les données SEO');
                 return;
             }
+
+            const webhookUrl = document.getElementById('gsheets-webhook-url').value.trim();
 
             try {
                 const csvData = [];
@@ -874,7 +931,25 @@
 
                 const csvContent = csvData.join('\n');
                 
-                // Créer et télécharger le fichier CSV
+                // Synchronisation automatique via Google Apps Script si URL présente
+                if (webhookUrl) {
+                    try {
+                        const params = new URLSearchParams();
+                        params.append('data', csvContent);
+                        
+                        await fetch(webhookUrl, {
+                            method: 'POST',
+                            body: params
+                        });
+                        
+                        showSuccess(`✅ Synchronisation réussie! Les données ont été envoyées à Google Sheets automatiquement.`);
+                        return;
+                    } catch (err) {
+                        console.log('Synchronisation directe impossible, fallback sur téléchargement');
+                    }
+                }
+                
+                // Fallback: Télécharger le fichier CSV
                 const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
                 const link = document.createElement('a');
                 const url = URL.createObjectURL(blob);
@@ -882,7 +957,6 @@
                 link.setAttribute('download', `seo_data_${new Date().toISOString().split('T')[0]}.csv`);
                 link.click();
                 
-                // Afficher les instructions pour Google Sheets
                 showSuccess(`✅ Export réussi! Fichier téléchargé: seo_data_${new Date().toISOString().split('T')[0]}.csv<br><br>
                     <strong>📋 Pour importer dans Google Sheets:</strong><br>
                     1. Ouvrez votre Google Sheets<br>
@@ -890,11 +964,6 @@
                     3. Sélectionnez le fichier CSV<br>
                     4. Choisissez "Ajouter à la feuille actuelle"<br>
                     5. Cliquez sur Importer`);
-                
-                // Copier le contenu CSV dans le presse-papiers pour faciliter l'import
-                navigator.clipboard.writeText(csvContent).catch(err => {
-                    console.log('Impossible de copier dans le presse-papiers:', err);
-                });
             } catch (error) {
                 showError(`Erreur lors de l'export: ${error.message}`);
             }
@@ -1302,27 +1371,37 @@
             const minPos = Math.min(...positions, 1);
             const range = maxPos - minPos || 1;
 
-            const points = positions.map((pos, i) => {
-                const x = (i / (positions.length - 1)) * 100;
+            let points = '';
+            if (positions.length > 1) {
+                points = positions.map((pos, i) => {
+                    const x = (i / (positions.length - 1)) * 100;
+                    const y = 90 - ((pos - minPos) / range) * 80;
+                    return `${x},${y}`;
+                }).join(' ');
+            } else if (positions.length === 1) {
+                const pos = positions[0];
                 const y = 90 - ((pos - minPos) / range) * 80;
-                return `${x},${y}`;
-            }).join(' ');
+                points = `50,${y}`;
+            }
 
             const avgPosition = (positions.reduce((a, b) => a + b, 0) / positions.length).toFixed(1);
+            const chartColor = getComputedStyle(document.documentElement).getPropertyValue('--color-primary').trim();
 
             chartArea.innerHTML = `
-                <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style="border-radius: 8px;">
-                    <defs>
-                        <linearGradient id="gradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                            <stop offset="0%" style="stop-color: var(--color-primary); stop-opacity: 0.3" />
-                            <stop offset="100%" style="stop-color: var(--color-primary); stop-opacity: 0.05" />
-                        </linearGradient>
-                    </defs>
-                    <polyline points="0,100 ${points} 100,100" fill="url(#gradient)" />
-                    <polyline points="${points}" fill="none" stroke="var(--color-primary)" stroke-width="0.5" vector-effect="non-scaling-stroke" />
-                </svg>
-                <div style="position: absolute; bottom: 8px; left: 12px; font-size: 11px; color: var(--color-text-secondary);">
-                    Positions réelles des mots-clés (Moyenne: ${avgPosition})
+                <div style="width: 100%; height: 100%; position: relative; display: flex; align-items: center; justify-content: center;">
+                    <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style="position: absolute; top: 0; left: 0;">
+                        <defs>
+                            <linearGradient id="chartGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                                <stop offset="0%" style="stop-color: rgb(33, 128, 141); stop-opacity: 0.3" />
+                                <stop offset="100%" style="stop-color: rgb(33, 128, 141); stop-opacity: 0.05" />
+                            </linearGradient>
+                        </defs>
+                        <polyline points="0,100 ${points} 100,100" fill="url(#chartGradient)" stroke="none" />
+                        <polyline points="${points}" fill="none" stroke="rgb(33, 128, 141)" stroke-width="1.5" />
+                    </svg>
+                    <div style="position: absolute; bottom: 12px; left: 16px; font-size: 12px; color: var(--color-text-secondary); background: var(--color-surface); padding: 4px 8px; border-radius: 4px;">
+                        Position moyenne: <strong>${avgPosition}</strong>
+                    </div>
                 </div>
             `;
         }
